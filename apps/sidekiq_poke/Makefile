@@ -4,6 +4,9 @@ up:
 down:
 	docker compose --profile=all down --rmi local -v
 
+stop:
+	docker compose --profile all stop 
+
 run-local:
 	rackup -p 4000
 
