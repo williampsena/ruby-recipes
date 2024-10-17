@@ -1,0 +1,29 @@
+FROM ruby:3.2.2-alpine
+
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV TZ=UTC
+
+RUN apk add --no-cache \
+  build-base \
+  imagemagick-dev \
+  libtool \
+  musl-dev \
+  gcc \
+  g++ \
+  make \
+  git
+
+RUN gem install rmagick
+
+WORKDIR /app
+
+COPY Gemfile Gemfile.lock ./
+
+RUN bundle install
+
+COPY . .
+
+RUN gem install rack
+
+EXPOSE 3000

@@ -1,0 +1,9 @@
+---
+:concurrency: 2
+:queues:
+  - default
+  - creator_pokemon
+  - download_pokemon_image
+  - slideshow_generator
+
+  

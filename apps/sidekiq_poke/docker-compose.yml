@@ -1,0 +1,119 @@
+x-environment: &environment
+  - IMAGES_PATH=public/poke_images
+  - BASE_API_URL=https://pokeapi.co/api/v2
+  - COOKIE_SECRET=fake-g31gtMfOmigyEGVnuTQIwNXAoLi2RxIyYzq1M3mZPZjt3NWKROfBchjsH3vO0NEe
+  - MAX_SLEEP=30
+
+services:
+  redis:
+    profiles: ['all', 'db']
+    image: docker.io/bitnami/redis:7.4
+    networks:
+      - sidekiq-redis
+    command: /opt/bitnami/scripts/redis/run.sh --maxmemory 100mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_AOF_ENABLED=no
+      - REDIS_PORT_NUMBER=16379
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    ports:
+      - 16379:16379
+    volumes:
+      - redis_data:/bitnami/redis/data
+
+  redis-persistent:
+    profiles: ['all', 'db']
+    image: docker.io/bitnami/redis:7.4
+    networks:
+      - sidekiq-redis
+    command: /opt/bitnami/scripts/redis/run.sh --maxmemory 100mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    ports:
+      - 16380:16380
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_AOF_ENABLED=yes
+      - REDIS_PORT_NUMBER=16380
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    volumes:
+      - redis_data_persistent:/bitnami/redis/data
+
+  redisinsight:
+    profiles: ['all', 'db']
+    image: docker.io/redislabs/redisinsight:latest
+    networks:
+      - sidekiq-redis
+    environment:
+      - RI_APP_PORT=15540
+    ports:
+      - 15540:15540
+
+  app: &x-app
+    profiles: ['all', 'app']
+    build: 
+      context: ./
+      dockerfile: Containerfile
+    command: rackup -o 0.0.0.0 -p 4000
+    networks:
+      - sidekiq-redis
+    environment:
+      - IMAGES_PATH=${IMAGES_PATH}
+      - BASE_API_URL=${BASE_API_URL}
+      - REDIS_URL=redis://redis:16379/0
+      - REDIS_PERSISTENT_URL=redis://redis-persistent:16380/0
+      - COOKIE_SECRET=${COOKIE_SECRET}
+      - MAX_SLEEP=${MAX_SLEEP}
+    ports:
+      - 4000:4000
+
+  app-persistent: 
+    profiles: ['all', 'app']
+    command: rackup -o 0.0.0.0 -p 4001
+    <<: *x-app
+    environment:
+      - IMAGES_PATH=${IMAGES_PATH}
+      - BASE_API_URL=${BASE_API_URL}
+      - REDIS_URL=redis://redis-persistent:16380/0
+      - REDIS_PERSISTENT_URL=redis://redis-persistent:16380/0
+      - COOKIE_SECRET=${COOKIE_SECRET}
+      - MAX_SLEEP=${MAX_SLEEP}
+    ports:
+      - 4001:4001
+
+  sidekiq: &x-sidekiq
+    profiles: ['all', 'app']
+    build: 
+      context: ./
+      dockerfile: Containerfile
+    command: bundle exec sidekiq -r ./sidekiq.rb
+    networks:
+      - sidekiq-redis
+    environment:
+      - IMAGES_PATH=${IMAGES_PATH}
+      - BASE_API_URL=${BASE_API_URL}
+      - REDIS_URL=redis://redis:16379/0
+      - REDIS_PERSISTENT_URL=redis://redis-persistent:16380/0
+      - COOKIE_SECRET=${COOKIE_SECRET}
+      - MAX_SLEEP=${MAX_SLEEP}
+
+  sidekiq-persistent:
+    profiles: ['all', 'app']
+    <<: *x-sidekiq
+    environment:
+      - IMAGES_PATH=${IMAGES_PATH}
+      - BASE_API_URL=${BASE_API_URL}
+      - REDIS_URL=redis://redis-persistent:16380/0
+      - REDIS_PERSISTENT_URL=redis://redis-persistent:16380/0
+      - COOKIE_SECRET=${COOKIE_SECRET}
+      - MAX_SLEEP=${MAX_SLEEP}
+
+volumes:
+  redis_data:
+    driver: local
+
+  redis_data_persistent:
+    driver: local
+
+networks:
+  sidekiq-redis:
